@@ -3,11 +3,12 @@
   import mermaid from 'mermaid';
   import { onMount } from 'svelte';
 
-  let { content } = $props();
+  let { content, filepath = '' } = $props();
 
   let container;
   let ready = false;
   let renderSeq = 0; // abort stale renders on rapid updates
+  let lightboxSvg = $state(null);
 
   onMount(() => {
     mermaid.initialize({
@@ -41,6 +42,23 @@
     // Render markdown HTML
     container.innerHTML = marked.parse(src, { breaks: true, gfm: true });
 
+    // Rewrite relative image src → /api/image?path=<absolute>
+    if (filepath) {
+      const dir = filepath.substring(0, filepath.lastIndexOf('/') + 1);
+      container.querySelectorAll('img').forEach((img) => {
+        const src = img.getAttribute('src') ?? '';
+        if (src && !src.startsWith('http') && !src.startsWith('//') && !src.startsWith('data:') && !src.startsWith('/')) {
+          const parts = (dir + src).split('/');
+          const resolved = [];
+          for (const p of parts) {
+            if (p === '..') resolved.pop();
+            else if (p !== '.') resolved.push(p);
+          }
+          img.src = `/api/image?path=${encodeURIComponent(resolved.join('/'))}`;
+        }
+      });
+    }
+
     // Find and replace mermaid code blocks with rendered SVG
     const blocks = container.querySelectorAll('code.language-mermaid');
     for (const block of blocks) {
@@ -54,6 +72,10 @@
       try {
         const { svg } = await mermaid.render(id, definition);
         wrapper.innerHTML = svg;
+        wrapper.title = 'Click to expand';
+        wrapper.addEventListener('click', () => {
+          lightboxSvg = svg;
+        });
       } catch (err) {
         wrapper.innerHTML = `<pre class="mermaid-err">Mermaid error:\n${err.message ?? err}</pre>`;
       }
@@ -62,14 +84,26 @@
       block.parentElement?.replaceWith(wrapper);
     }
   }
+
+  function closeLightbox() {
+    lightboxSvg = null;
+  }
 </script>
 
 <article class="markdown" bind:this={container}></article>
 
+{#if lightboxSvg}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="lightbox" onclick={closeLightbox}>
+    <div class="lightbox-inner" onclick={(e) => e.stopPropagation()}>
+      <button class="lightbox-close" onclick={closeLightbox} aria-label="Close">✕</button>
+      {@html lightboxSvg}
+    </div>
+  </div>
+{/if}
+
 <style>
   .markdown {
-    max-width: 860px;
-    margin: 0 auto;
     padding: 40px 28px 80px;
     color: var(--text);
     font-family: var(--font-sans);
@@ -202,6 +236,11 @@
     margin:        1.2em 0;
     text-align:    center;
     overflow-x:    auto;
+    cursor:        zoom-in;
+    transition:    border-color 0.15s;
+  }
+  .markdown :global(.mermaid-wrap:hover) {
+    border-color: var(--accent);
   }
   .markdown :global(.mermaid-wrap svg) {
     max-width: 100%;
@@ -213,5 +252,59 @@
     font-size:   0.8em;
     text-align:  left;
     white-space: pre-wrap;
+  }
+
+  /* ── Lightbox ───────────────────────────────────────────── */
+  .lightbox {
+    position:        fixed;
+    inset:           0;
+    z-index:         1000;
+    background:      rgba(0, 0, 0, 0.85);
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    cursor:          zoom-out;
+    backdrop-filter: blur(4px);
+  }
+
+  .lightbox-inner {
+    position:      relative;
+    background:    var(--surface);
+    border:        1px solid var(--border);
+    border-radius: var(--radius);
+    padding:       48px 40px 40px;
+    width:         92vw;
+    height:        92vh;
+    overflow:      auto;
+    cursor:        default;
+    display:       flex;
+    align-items:   center;
+    justify-content: center;
+  }
+
+  .lightbox-inner :global(svg) {
+    width:      100%;
+    height:     100%;
+    max-width:  none;
+    display:    block;
+  }
+
+  .lightbox-close {
+    position:   absolute;
+    top:        10px;
+    right:      12px;
+    background: none;
+    border:     none;
+    color:      var(--text-muted);
+    font-size:  18px;
+    cursor:     pointer;
+    padding:    4px 8px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .lightbox-close:hover {
+    color:      var(--text);
+    background: var(--surface-2);
   }
 </style>

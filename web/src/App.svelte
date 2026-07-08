@@ -1,15 +1,29 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import MarkdownView from './lib/MarkdownView.svelte';
   import OpenAPIView from './lib/OpenAPIView.svelte';
   import JSONView from './lib/JSONView.svelte';
 
-  let connected = $state(false);
-  let content   = $state('');
-  let filetype  = $state('');
-  let filename  = $state('');
+  let connected   = $state(false);
+  let content     = $state('');
+  let filetype    = $state('');
+  let filename    = $state('');
+  let filepath    = $state('');
+  let gitStatus   = $state('');
+  let anchorRatio = $state(null);
+  let viewEl;
 
   onMount(() => { connect(); });
+
+  function scrollToRatio(ratio) {
+    if (!viewEl) return;
+    tick().then(() => {
+      viewEl.scrollTo({
+        top: Math.min(1, Math.max(0, ratio)) * (viewEl.scrollHeight - viewEl.clientHeight),
+        behavior: 'smooth',
+      });
+    });
+  }
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -22,9 +36,17 @@
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'focus') {
-          content  = msg.content;
-          filetype = msg.filetype;
-          filename = msg.filename;
+          if (msg.filename !== filename) anchorRatio = null;
+          content   = msg.content;
+          filetype  = msg.filetype;
+          filename  = msg.filename;
+          filepath  = msg.filepath || '';
+          gitStatus = msg.gitStatus || '';
+          if (anchorRatio !== null) scrollToRatio(anchorRatio);
+        }
+        if (msg.type === 'anchor') {
+          anchorRatio = msg.line / msg.total;
+          scrollToRatio(anchorRatio);
         }
       } catch (_) {}
     };
@@ -38,11 +60,14 @@
     {#if filetype}
       <span class="badge">{filetype}</span>
     {/if}
+    {#if gitStatus}
+      <span class="badge git-badge git-{gitStatus}">{gitStatus}</span>
+    {/if}
     <span class="spacer"></span>
     <span class="brand">◉ SAURON</span>
   </header>
 
-  <main class="view">
+  <main class="view" bind:this={viewEl}>
     {#if !content}
       <div class="idle">
         <span class="eye">◉</span>
@@ -53,7 +78,7 @@
         </p>
       </div>
     {:else if filetype === 'markdown'}
-      <MarkdownView {content} />
+      <MarkdownView {content} {filepath} />
     {:else if filetype === 'yaml'}
       <OpenAPIView {content} />
     {:else if filetype === 'json'}
@@ -110,6 +135,14 @@
     color: var(--accent);
     font-family: var(--font-mono);
   }
+
+  .git-badge {
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .git-staged    { color: var(--green);  border-color: var(--green);  }
+  .git-modified  { color: var(--yellow); border-color: var(--yellow); }
+  .git-untracked { color: var(--text-muted); border-color: var(--border); }
 
   .spacer { flex: 1; }
 

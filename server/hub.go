@@ -10,10 +10,14 @@ import (
 
 // Message is the wire protocol between server and browser.
 type Message struct {
-	Type     string `json:"type"`
-	Filetype string `json:"filetype"`
-	Filename string `json:"filename"`
-	Content  string `json:"content"`
+	Type      string `json:"type"`
+	Filetype  string `json:"filetype,omitempty"`
+	Filename  string `json:"filename,omitempty"`
+	Filepath  string `json:"filepath,omitempty"`
+	Content   string `json:"content,omitempty"`
+	GitStatus string `json:"gitStatus,omitempty"`
+	Line      int    `json:"line,omitempty"`
+	Total     int    `json:"total,omitempty"`
 }
 
 // WSClient is a connected browser tab.
@@ -89,6 +93,26 @@ func (h *Hub) publish(msg Message) {
 		return
 	}
 	h.broadcast <- data
+}
+
+// publishNoStore broadcasts msg to all clients without updating h.last.
+// Use for ephemeral messages (e.g. anchor) that should not be replayed to new tabs.
+func (h *Hub) publishNoStore(msg Message) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("marshal error: %v", err)
+		return
+	}
+	h.mu.Lock()
+	for c := range h.clients {
+		select {
+		case c.send <- data:
+		default:
+			close(c.send)
+			delete(h.clients, c)
+		}
+	}
+	h.mu.Unlock()
 }
 
 // writePump pumps messages from the hub to the WebSocket connection.

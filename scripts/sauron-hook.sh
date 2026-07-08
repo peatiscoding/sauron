@@ -32,8 +32,24 @@ esac
 
 FILENAME="$(basename "$FILE")"
 CONTENT="$(cat "$FILE")"
-PAYLOAD="$(jq -n --arg c "$CONTENT" --arg t "$FILETYPE" --arg f "$FILENAME" \
-  '{ content: $c, filetype: $t, filename: $f }')"
+
+# Detect git stage status for the file.
+GIT_STATUS=""
+if command -v git &>/dev/null; then
+  GIT_RAW="$(git -C "$(dirname "$FILE")" status --porcelain -- "$FILE" 2>/dev/null | head -1)"
+  if [ -n "$GIT_RAW" ]; then
+    XY="${GIT_RAW:0:2}"
+    case "$XY" in
+      "??")               GIT_STATUS="untracked" ;;
+      " M"|" D")          GIT_STATUS="modified"  ;;
+      "MM"|"AM"|"RM")     GIT_STATUS="modified"  ;;
+      *)                  GIT_STATUS="staged"    ;;
+    esac
+  fi
+fi
+
+PAYLOAD="$(jq -n --arg c "$CONTENT" --arg t "$FILETYPE" --arg f "$FILENAME" --arg g "$GIT_STATUS" --arg fp "$FILE" \
+  '{ content: $c, filetype: $t, filename: $f, gitStatus: $g, filepath: $fp }')"
 
 curl -s -X POST "$SAURON_URL/api/focus" \
   -H "Content-Type: application/json" \

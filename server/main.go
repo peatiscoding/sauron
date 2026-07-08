@@ -27,6 +27,10 @@ func main() {
 	mux.HandleFunc("/api/focus", func(w http.ResponseWriter, r *http.Request) {
 		handleFocus(hub, w, r)
 	})
+	mux.HandleFunc("/api/anchor", func(w http.ResponseWriter, r *http.Request) {
+		handleAnchor(hub, w, r)
+	})
+	mux.HandleFunc("/api/image", handleImage)
 	mux.HandleFunc("/", spaHandler(sub))
 
 	log.Println("Sauron eye open on :6905")
