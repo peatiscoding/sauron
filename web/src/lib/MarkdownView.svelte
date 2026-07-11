@@ -1,68 +1,191 @@
 <script>
   import { marked } from 'marked';
   import mermaid from 'mermaid';
+  import hljs from 'highlight.js';
   import { onMount } from 'svelte';
 
-  let { content, filepath = '' } = $props();
+  let { content, filepath = '', theme = 'dark', filetype = 'markdown' } = $props();
 
   let container;
   let ready = false;
   let renderSeq = 0; // abort stale renders on rapid updates
   let lightboxSvg = $state(null);
+  let currentRender = Promise.resolve();
 
-  onMount(() => {
-    mermaid.initialize({
+  export function awaitRender() { return currentRender; }
+
+  function mermaidConfig(t) {
+    if (t === 'light') {
+      return {
+        startOnLoad: false,
+        theme: 'default',
+        themeVariables: {
+          background:          '#ffffff',
+          primaryColor:        '#dbeafe',
+          primaryTextColor:    '#24292f',
+          primaryBorderColor:  '#d0d7de',
+          lineColor:           '#0969da',
+          secondaryColor:      '#f6f8fa',
+          tertiaryColor:       '#eaeef2',
+          edgeLabelBackground: '#ffffff',
+          fontFamily:          'JetBrains Mono, Fira Code, monospace',
+          fontSize:            '14px',
+        },
+        securityLevel: 'loose',
+      };
+    }
+    return {
       startOnLoad: false,
       theme: 'dark',
       themeVariables: {
-        background:        '#0d1117',
-        primaryColor:      '#1f6feb',
-        primaryTextColor:  '#c9d1d9',
-        primaryBorderColor:'#30363d',
-        lineColor:         '#58a6ff',
-        secondaryColor:    '#161b22',
-        tertiaryColor:     '#21262d',
-        edgeLabelBackground:'#161b22',
-        fontFamily:        'JetBrains Mono, Fira Code, monospace',
-        fontSize:          '14px',
+        background:          '#0d1117',
+        primaryColor:        '#1f6feb',
+        primaryTextColor:    '#c9d1d9',
+        primaryBorderColor:  '#30363d',
+        lineColor:           '#58a6ff',
+        secondaryColor:      '#161b22',
+        tertiaryColor:       '#21262d',
+        edgeLabelBackground: '#161b22',
+        fontFamily:          'JetBrains Mono, Fira Code, monospace',
+        fontSize:            '14px',
       },
       securityLevel: 'loose',
-    });
+    };
+  }
+
+  onMount(() => {
+    mermaid.initialize(mermaidConfig(theme));
     ready = true;
   });
 
   $effect(() => {
     if (!container || !ready || !content) return;
-    render(content);
+    mermaid.initialize(mermaidConfig(theme));
+    currentRender = render(content);
   });
 
   async function render(src) {
     const seq = ++renderSeq;
 
-    // Render markdown HTML
-    container.innerHTML = marked.parse(src, { breaks: true, gfm: true });
+    if (filetype === 'mdx') {
+      await renderMDX(src, seq);
+    } else {
+      await renderMarkdown(src, seq);
+    }
+  }
 
-    // Rewrite relative image src → /api/image?path=<absolute>
-    if (filepath) {
-      const dir = filepath.substring(0, filepath.lastIndexOf('/') + 1);
-      container.querySelectorAll('img').forEach((img) => {
-        const src = img.getAttribute('src') ?? '';
-        if (src && !src.startsWith('http') && !src.startsWith('//') && !src.startsWith('data:') && !src.startsWith('/')) {
-          const parts = (dir + src).split('/');
-          const resolved = [];
-          for (const p of parts) {
-            if (p === '..') resolved.pop();
-            else if (p !== '.') resolved.push(p);
-          }
-          img.src = `/api/image?path=${encodeURIComponent(resolved.join('/'))}`;
-        }
-      });
+  async function renderMarkdown(src, seq) {
+    // Configure marked with highlight.js
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+    });
+
+    const renderer = new marked.Renderer();
+    renderer.code = ({ text, lang }) => {
+      if (lang === 'mermaid') {
+        // Leave mermaid blocks for post-processing
+        return `<pre><code class="language-mermaid">${text}</code></pre>`;
+      }
+      if (lang && hljs.getLanguage(lang)) {
+        const highlighted = hljs.highlight(text, { language: lang }).value;
+        return `<pre><code class="hljs language-${lang}">${highlighted}</code></pre>`;
+      }
+      const highlighted = hljs.highlightAuto(text).value;
+      return `<pre><code class="hljs">${highlighted}</code></pre>`;
+    };
+
+    container.innerHTML = marked.parse(src, { renderer });
+
+    rewriteImagePaths(container);
+    await processMermaid(container, seq);
+  }
+
+  async function renderMDX(src, seq) {
+    const { evaluate } = await import('@mdx-js/mdx');
+    const { jsx, jsxs, Fragment } = await import('preact/jsx-runtime');
+    const { render: preactRender } = await import('preact');
+
+    // Strip import statements — they can't resolve in browser
+    // Keep exports (they define inline components like Box, Arrow, etc.)
+    function remarkStripImports() {
+      return (tree) => {
+        tree.children = tree.children.filter(
+          (n) => !(n.type === 'mdxjsEsm' && /^\s*import\s/.test(n.value))
+        );
+      };
     }
 
-    // Find and replace mermaid code blocks with rendered SVG
-    const blocks = container.querySelectorAll('code.language-mermaid');
+    // Fallback component for unknown JSX tags
+    const fallback = new Proxy({}, {
+      get(_, name) {
+        if (typeof name !== 'string') return undefined;
+        return ({ children, ...props }) =>
+          jsx('div', { 'data-mdx-component': name, ...props, children });
+      }
+    });
+
+    // Custom code renderer inside MDX
+    function CodeBlock({ className, children, ...props }) {
+      const lang = (className ?? '').replace('language-', '');
+      if (lang === 'mermaid') {
+        return jsx('pre', { children: jsx('code', { class: 'language-mermaid', children }) });
+      }
+      if (lang && hljs.getLanguage(lang)) {
+        const highlighted = hljs.highlight(String(children ?? ''), { language: lang }).value;
+        return jsx('code', {
+          class: `hljs language-${lang}`,
+          dangerouslySetInnerHTML: { __html: highlighted },
+        });
+      }
+      const highlighted = hljs.highlightAuto(String(children ?? '')).value;
+      return jsx('code', { class: 'hljs', dangerouslySetInnerHTML: { __html: highlighted } });
+    }
+
+    try {
+      const remarkGfm = (await import('remark-gfm')).default;
+      const remarkFrontmatter = (await import('remark-frontmatter')).default;
+      const { default: MDXContent, ...exportedComponents } = await evaluate(src, {
+        jsx,
+        jsxs,
+        Fragment,
+        remarkPlugins: [remarkFrontmatter, remarkGfm, remarkStripImports],
+      });
+
+      preactRender(
+        jsx(MDXContent, { components: { ...fallback, ...exportedComponents, code: CodeBlock } }),
+        container,
+      );
+    } catch (err) {
+      container.innerHTML = `<pre class="mermaid-err">MDX error:\n${err.message ?? err}</pre>`;
+      return;
+    }
+
+    rewriteImagePaths(container);
+    await processMermaid(container, seq);
+  }
+
+  function rewriteImagePaths(el) {
+    if (!filepath) return;
+    const dir = filepath.substring(0, filepath.lastIndexOf('/') + 1);
+    el.querySelectorAll('img').forEach((img) => {
+      const s = img.getAttribute('src') ?? '';
+      if (s && !s.startsWith('http') && !s.startsWith('//') && !s.startsWith('data:') && !s.startsWith('/')) {
+        const parts = (dir + s).split('/');
+        const resolved = [];
+        for (const p of parts) {
+          if (p === '..') resolved.pop();
+          else if (p !== '.') resolved.push(p);
+        }
+        img.src = `/api/image?path=${encodeURIComponent(resolved.join('/'))}`;
+      }
+    });
+  }
+
+  async function processMermaid(el, seq) {
+    const blocks = el.querySelectorAll('code.language-mermaid');
     for (const block of blocks) {
-      if (seq !== renderSeq) return; // content changed — abort
+      if (seq !== renderSeq) return;
 
       const definition = block.textContent.trim();
       const id = `mermaid-${seq}-${Math.random().toString(36).slice(2, 8)}`;
@@ -73,14 +196,11 @@
         const { svg } = await mermaid.render(id, definition);
         wrapper.innerHTML = svg;
         wrapper.title = 'Click to expand';
-        wrapper.addEventListener('click', () => {
-          lightboxSvg = svg;
-        });
+        wrapper.addEventListener('click', () => { lightboxSvg = svg; });
       } catch (err) {
         wrapper.innerHTML = `<pre class="mermaid-err">Mermaid error:\n${err.message ?? err}</pre>`;
       }
 
-      // block.parentElement is the <pre>
       block.parentElement?.replaceWith(wrapper);
     }
   }
@@ -252,6 +372,18 @@
     font-size:   0.8em;
     text-align:  left;
     white-space: pre-wrap;
+  }
+
+  /* ── Print ──────────────────────────────────────────────── */
+  @media print {
+    .lightbox { display: none; }
+    .markdown :global(.mermaid-wrap) {
+      cursor: default;
+      break-inside: avoid;
+    }
+    .markdown :global(pre) { break-inside: avoid; }
+    .markdown :global(table) { break-inside: avoid; }
+    .markdown :global(img) { break-inside: avoid; }
   }
 
   /* ── Lightbox ───────────────────────────────────────────── */
