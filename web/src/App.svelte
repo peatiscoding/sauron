@@ -45,6 +45,16 @@
     window.print();
   }
 
+  function downloadYAML() {
+    const blob = new Blob([content], { type: 'application/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'spec.yaml';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -83,6 +93,9 @@
       <span class="badge git-badge git-{gitStatus}">{gitStatus}</span>
     {/if}
     <span class="spacer"></span>
+    {#if content && filetype === 'yaml'}
+      <button class="pdf-btn" onclick={downloadYAML} title="Download YAML">⬇ YAML</button>
+    {/if}
     {#if content}
       <button class="pdf-btn" onclick={exportPDF} title="Export to PDF">⬇ PDF</button>
     {/if}

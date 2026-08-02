@@ -140,10 +140,10 @@ Server broadcasts JSON to connected clients:
 
 ## Tech Stack
 
-| Layer    | Tech                                          |
-|----------|-----------------------------------------------|
-| Backend  | Go, gorilla/websocket                         |
-| Frontend | Svelte 5, Vite, marked, highlight.js, Mermaid |
-| MDX      | @mdx-js/mdx, Preact, remark-gfm              |
-| API Docs | RapiDoc, js-yaml                              |
-| Editor   | Neovim (Lua), Claude Code (bash hook)         |
+| Layer    | Tech                                                                                                                                                                                                                     |
+|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Backend  | [Go](https://go.dev/) 1.21, [gorilla/websocket](https://github.com/gorilla/websocket) 1.5                                                                                                                               |
+| Frontend | [Svelte](https://svelte.dev/) 5, [Vite](https://vite.dev/) 5, [marked](https://github.com/markedjs/marked) 13, [highlight.js](https://highlightjs.org/) 11, [Mermaid](https://mermaid.js.org/) 11                       |
+| MDX      | [@mdx-js/mdx](https://mdxjs.com/) 3.1, [Preact](https://preactjs.com/) 10, [remark-gfm](https://github.com/remarkjs/remark-gfm) 4, [remark-frontmatter](https://github.com/remarkjs/remark-frontmatter) 5             |
+| API Docs | [RapiDoc](https://rapidocweb.com/) 9.3, [js-yaml](https://github.com/nodeca/js-yaml) 4                                                                                                                                 |
+| Editor   | [Neovim](https://neovim.io/) (Lua), [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (bash hook)                                                                                                           |
