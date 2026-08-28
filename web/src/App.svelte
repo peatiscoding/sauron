@@ -3,6 +3,7 @@
   import MarkdownView from './lib/MarkdownView.svelte';
   import OpenAPIView from './lib/OpenAPIView.svelte';
   import JSONView from './lib/JSONView.svelte';
+  import PklView from './lib/PklView.svelte';
   import SauronEye from './lib/SauronEye.svelte';
 
   let connected   = $state(false);
@@ -26,6 +27,9 @@
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('depict-theme', theme);
   });
+  $effect(() => {
+    document.title = content ? `S - ${filename}` : 'Sauron';
+  });
   function toggleTheme() { theme = theme === 'dark' ? 'light' : 'dark'; }
 
   onMount(() => { connect(); });
@@ -45,12 +49,60 @@
     window.print();
   }
 
-  function downloadYAML() {
-    const blob = new Blob([content], { type: 'application/yaml' });
+  function downloadSource() {
+    const mimeMap = {
+      yaml: 'application/yaml',
+      json: 'application/json',
+      markdown: 'text/markdown',
+      mdx: 'text/markdown',
+      pkl: 'text/plain',
+    };
+    const fallbackName = {
+      yaml: 'spec.yaml',
+      json: 'data.json',
+      markdown: 'document.md',
+      mdx: 'document.mdx',
+      pkl: 'config.pkl',
+    };
+    const blob = new Blob([content], { type: mimeMap[filetype] || 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || 'spec.yaml';
+    a.download = filename || fallbackName[filetype] || 'file.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportHTML() {
+    if (markdownView?.awaitRender) await markdownView.awaitRender();
+
+    // Gather all stylesheets into inline styles
+    const styles = [...document.styleSheets].map(sheet => {
+      try { return [...sheet.cssRules].map(r => r.cssText).join('\n'); }
+      catch (_) { return ''; }
+    }).join('\n');
+
+    const rendered = viewEl?.innerHTML || '';
+    const baseName = (filename || 'export').replace(/\.[^.]+$/, '');
+
+    const html = `<!DOCTYPE html>
+<html data-theme="${theme}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${baseName}</title>
+<style>${styles}</style>
+</head>
+<body>
+<div id="app"><main class="view" style="overflow:visible;height:auto;">${rendered}</main></div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseName}.html`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -93,10 +145,11 @@
       <span class="badge git-badge git-{gitStatus}">{gitStatus}</span>
     {/if}
     <span class="spacer"></span>
-    {#if content && filetype === 'yaml'}
-      <button class="pdf-btn" onclick={downloadYAML} title="Download YAML">⬇ YAML</button>
+    {#if content}
+      <button class="pdf-btn" onclick={downloadSource} title="Download {filetype.toUpperCase()}">⬇ {filetype.toUpperCase()}</button>
     {/if}
     {#if content}
+      <button class="pdf-btn" onclick={exportHTML} title="Export to HTML">⬇ HTML</button>
       <button class="pdf-btn" onclick={exportPDF} title="Export to PDF">⬇ PDF</button>
     {/if}
     <button class="theme-btn" onclick={toggleTheme}
@@ -127,7 +180,7 @@
         <span class="eye">◉</span>
         <p>Watching for file focus…</p>
         <p class="hint">
-          Open a <code>.md</code>, <code>.mdx</code>, <code>.yaml</code>, or <code>.json</code> in nvim,
+          Open a <code>.md</code>, <code>.mdx</code>, <code>.yaml</code>, <code>.json</code>, or <code>.pkl</code> in nvim,
           or let Claude edit a file.
         </p>
       </div>
@@ -137,6 +190,8 @@
       <OpenAPIView {content} />
     {:else if filetype === 'json'}
       <JSONView {content} />
+    {:else if filetype === 'pkl'}
+      <PklView {content} />
     {:else}
       <pre class="raw">{content}</pre>
     {/if}

@@ -27,6 +27,7 @@ case "$EXT" in
   md)           FILETYPE="markdown" ;;
   yaml|yml)     FILETYPE="yaml"     ;;
   json)         FILETYPE="json"     ;;
+  pkl)          FILETYPE="pkl"      ;;
   *)            exit 0              ;;
 esac
 

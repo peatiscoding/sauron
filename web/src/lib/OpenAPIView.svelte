@@ -46,6 +46,7 @@
   sort-tags="true"
   schema-style="tree"
   schema-expand-level="2"
+  default-schema-tab="example"
   style="width:100%;height:100%;display:block;"
 ></rapi-doc>
 
