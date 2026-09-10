@@ -30,6 +30,37 @@
   $effect(() => {
     document.title = content ? `S - ${filename}` : 'Sauron';
   });
+
+  // ── Dynamic favicon ────────────────────────────────────
+  const eyeShards = [
+    '18.5,3.1 21.5,3.1 20,15',    '22.9,3.2 25.8,4 21.3,15.2',
+    '27.2,4.6 29.7,6.1 22.5,15.7','30.9,7 33,9.1 23.5,16.5',
+    '33.9,10.3 35.4,12.8 24.3,17.5','36,14.2 36.7,17 24.8,18.7',
+    '36.9,18.5 36.9,21.5 25,20',  '36.7,23 36,25.8 24.8,21.3',
+    '35.4,27.2 33.9,29.7 24.3,22.5','33,30.9 30.9,33 23.5,23.5',
+    '29.7,33.9 27.2,35.4 22.5,24.3','25.8,36 22.9,36.7 21.3,24.8',
+    '21.5,36.9 18.5,36.9 20,25',  '17.1,36.7 14.2,36 18.7,24.8',
+    '12.8,35.4 10.3,33.9 17.5,24.3','9.1,33 7,30.9 16.5,23.5',
+    '6.1,29.7 4.6,27.2 15.7,22.5','4,25.8 3.2,22.9 15.2,21.3',
+    '3.1,21.5 3.1,18.5 15,20',    '3.2,17.1 4,14.2 15.2,18.7',
+    '4.6,12.8 6.1,10.3 15.7,17.5','7,9.1 9.1,7 16.5,16.5',
+    '10.3,6.1 12.8,4.6 17.5,15.7','14.2,4 17.1,3.2 18.7,15.2',
+  ];
+  function buildFaviconSvg(open) {
+    const polys = eyeShards.map((pts, i) =>
+      `<polygon points="${pts}" fill="${i % 2 ? '#ff4400' : '#bb0000'}"/>`
+    ).join('');
+    const pupil = `<ellipse cx="20" cy="20" rx="2.3" ry="9.8" fill="#050000"/>` +
+      `<ellipse cx="20" cy="20" rx="3.1" ry="10.5" fill="none" stroke="#ffe066" stroke-width="1.1"/>`;
+    const scaleY = open ? 1 : 0.05;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">` +
+      `<g transform="translate(20,20) scale(1,${scaleY}) translate(-20,-20)">` +
+      `${polys}${pupil}</g></svg>`;
+  }
+  $effect(() => {
+    const el = document.getElementById('favicon');
+    if (el) el.href = 'data:image/svg+xml,' + encodeURIComponent(buildFaviconSvg(connected));
+  });
   function toggleTheme() { theme = theme === 'dark' ? 'light' : 'dark'; }
 
   onMount(() => { connect(); });
