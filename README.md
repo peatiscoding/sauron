@@ -43,7 +43,7 @@ A live preview server that watches your editor and renders markdown, MDX, YAML, 
 ./scripts/build.sh
 ```
 
-Installs npm deps, builds frontend into `server/static/`, compiles Go binary to `./sauron`.
+Installs pnpm deps, builds frontend into `server/static/`, compiles Go binary to `./sauron`.
 
 ### Run
 

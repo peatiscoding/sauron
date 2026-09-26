@@ -6,8 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "==> Building web frontend…"
 cd "$ROOT/web"
-npm install
-npm run build
+pnpm install
+pnpm run build
 echo "    → server/static/ populated"
 
 echo "==> Building Go server…"
